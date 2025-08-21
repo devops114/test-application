@@ -1,0 +1,57 @@
+version: 0.2
+
+env:
+  variables:
+    API_URL: "https://2r1jycdqag.execute-api.us-east-1.amazonaws.com/Prod/detect-errors/"
+
+phases:
+  install:
+    commands:
+      - echo "Installing Python dependencies..."
+      - python -m pip install --upgrade pip
+      - pip install jq  # For JSON parsing
+
+  build:
+    commands:
+      - echo "Running calculator application..."
+      - python calculator.py 2>&1 | tee build.log
+
+  post_build:
+    commands:
+      - |
+        # Prepare logs for AI analysis
+        echo "Preparing logs for AI analysis..."
+        LOG_LINES=()
+        while IFS= read -r line; do
+            LOG_LINES+=("$line")
+        done < build.log
+
+        # Create JSON payload
+        JSON_PAYLOAD="{\"log_lines\": ["
+        for line in "${LOG_LINES[@]}"; do
+            # Escape quotes and special characters
+            escaped_line=$(echo "$line" | sed 's/"/\\"/g')
+            JSON_PAYLOAD+="\"$escaped_line\","
+        done
+        JSON_PAYLOAD="${JSON_PAYLOAD%,}]}"
+
+        # Send logs to AI API
+        echo "Sending logs to AI detection API..."
+        RESPONSE=$(curl -s -X POST "$API_URL" \
+          -H "Content-Type: application/json" \
+          -d "$JSON_PAYLOAD")
+
+        echo "AI Analysis Response:"
+        echo "$RESPONSE" | jq .
+
+        # Check if errors were detected
+        ERRORS_FOUND=$(echo "$RESPONSE" | jq -r '.errors_found')
+        
+        if [ "$ERRORS_FOUND" = "true" ]; then
+            echo "❌ AI detected errors in build logs!"
+            echo "Build failed due to AI-detected errors"
+            exit 1
+        else
+            echo "✅ No errors detected by AI"
+            echo "Build completed successfully"
+        fi
