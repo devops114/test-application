@@ -1,3 +1,4 @@
+
 version: 0.2
 
 env:
@@ -7,9 +8,16 @@ env:
 phases:
   install:
     commands:
-      - echo "Installing Python dependencies..."
+      - echo "Installing dependencies..."
+      - apt-get update -y
+      - apt-get install -y jq
       - python -m pip install --upgrade pip
-      - pip install jq  # For JSON parsing
+
+  pre_build:
+    commands:
+      - echo "Setting up environment..."
+      - echo "Current directory: $(pwd)"
+      - echo "Files in directory: $(ls -la)"
 
   build:
     commands:
@@ -19,8 +27,8 @@ phases:
   post_build:
     commands:
       - |
-        # Prepare logs for AI analysis
         echo "Preparing logs for AI analysis..."
+        # Read the build log
         LOG_LINES=()
         while IFS= read -r line; do
             LOG_LINES+=("$line")
@@ -29,13 +37,11 @@ phases:
         # Create JSON payload
         JSON_PAYLOAD="{\"log_lines\": ["
         for line in "${LOG_LINES[@]}"; do
-            # Escape quotes and special characters
             escaped_line=$(echo "$line" | sed 's/"/\\"/g')
             JSON_PAYLOAD+="\"$escaped_line\","
         done
         JSON_PAYLOAD="${JSON_PAYLOAD%,}]}"
 
-        # Send logs to AI API
         echo "Sending logs to AI detection API..."
         RESPONSE=$(curl -s -X POST "$API_URL" \
           -H "Content-Type: application/json" \
