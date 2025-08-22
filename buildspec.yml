@@ -1,5 +1,4 @@
 
-
 version: 0.2
 
 env:
@@ -9,16 +8,8 @@ env:
 phases:
   install:
     commands:
-      - echo "Installing dependencies..."
       - apt-get update -y
       - apt-get install -y jq
-      - python -m pip install --upgrade pip
-
-  pre_build:
-    commands:
-      - echo "Setting up environment..."
-      - echo "Current directory: $(pwd)"
-      - echo "Files in directory: $(ls -la)"
 
   build:
     commands:
@@ -27,36 +18,22 @@ phases:
 
   post_build:
     commands:
-      - |
-        echo "Preparing logs for AI analysis..."
-        # Read the build log
-        LOG_LINES=()
-        while IFS= read -r line; do
-            LOG_LINES+=("$line")
-        done < build.log
+      - echo "Preparing logs for AI analysis..."
+      - LOG_LINES=$(cat build.log | sed 's/"/\\"/g' | tr '\n' '|')
+      - JSON_PAYLOAD="{\"log_lines\": [\"${LOG_LINES//|/\",\"}\"]}"
+      - JSON_PAYLOAD=${JSON_PAYLOAD%,\"]}
+      - JSON_PAYLOAD=${JSON_PAYLOAD}\"]}
 
-        # Create JSON payload
-        JSON_PAYLOAD="{\"log_lines\": ["
-        for line in "${LOG_LINES[@]}"; do
-            escaped_line=$(echo "$line" | sed 's/"/\\"/g')
-            JSON_PAYLOAD+="\"$escaped_line\","
-        done
-        JSON_PAYLOAD="${JSON_PAYLOAD%,}]}"
+      - echo "Sending logs to AI API..."
+      - RESPONSE=$(curl -s -X POST "$API_URL" -H "Content-Type: application/json" -d "$JSON_PAYLOAD")
+      
+      - echo "AI Response:"
+      - echo "$RESPONSE" | jq .
 
-        echo "Sending logs to AI detection API..."
-        RESPONSE=$(curl -s -X POST "$API_URL" -H "Content-Type: application/json" -d "$JSON_PAYLOAD")
-
-        echo "AI Analysis Response:"
-        echo "$RESPONSE" | jq .
-
-        # Check if errors were detected
-        ERRORS_FOUND=$(echo "$RESPONSE" | jq -r '.errors_found')
-        
-        if [ "$ERRORS_FOUND" = "true" ]; then
-            echo "❌ AI detected errors in build logs!"
-            echo "Build failed due to AI-detected errors"
-            exit 1
+      - ERRORS_FOUND=$(echo "$RESPONSE" | jq -r '.errors_found')
+      - if [ "$ERRORS_FOUND" = "true" ]; then
+          echo "AI detected errors! Build failed."
+          exit 1
         else
-            echo "✅ No errors detected by AI"
-            echo "Build completed successfully"
+          echo "No errors detected. Build succeeded."
         fi
