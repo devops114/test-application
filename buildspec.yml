@@ -19,21 +19,28 @@ phases:
   post_build:
     commands:
       - echo "Preparing logs for AI analysis..."
-      - LOG_LINES=$(cat build.log | sed 's/"/\\"/g' | tr '\n' '|')
-      - JSON_PAYLOAD="{\"log_lines\": [\"${LOG_LINES//|/\",\"}\"]}"
-      - JSON_PAYLOAD=${JSON_PAYLOAD%,\"]}
-      - JSON_PAYLOAD=${JSON_PAYLOAD}\"]}
-
-      - echo "Sending logs to AI API..."
-      - RESPONSE=$(curl -s -X POST "$API_URL" -H "Content-Type: application/json" -d "$JSON_PAYLOAD")
-      
-      - echo "AI Response:"
-      - echo "$RESPONSE" | jq .
-
-      - ERRORS_FOUND=$(echo "$RESPONSE" | jq -r '.errors_found')
-      - if [ "$ERRORS_FOUND" = "true" ]; then
-          echo "AI detected errors! Build failed."
-          exit 1
+      - |
+        # Read log file and format as JSON array
+        LOG_JSON="["
+        while IFS= read -r line; do
+            escaped_line=$(echo "$line" | sed 's/"/\\"/g')
+            LOG_JSON="$LOG_JSON\"$escaped_line\","
+        done < build.log
+        LOG_JSON="${LOG_JSON%,}]"
+        
+        # Create full payload
+        JSON_PAYLOAD="{\"log_lines\": $LOG_JSON}"
+        
+        echo "Sending logs to AI API..."
+        RESPONSE=$(curl -s -X POST "$API_URL" -H "Content-Type: application/json" -d "$JSON_PAYLOAD")
+        
+        echo "AI Response:"
+        echo "$RESPONSE" | jq .
+        
+        ERRORS_FOUND=$(echo "$RESPONSE" | jq -r '.errors_found')
+        if [ "$ERRORS_FOUND" = "true" ]; then
+            echo "AI detected errors! Build failed."
+            exit 1
         else
-          echo "No errors detected. Build succeeded."
+            echo "No errors detected. Build succeeded."
         fi
