@@ -1,62 +1,56 @@
 # azure-pipelines.yml
-name: $(Date:yyyyMMdd)$(Rev:.r)  # Build name format: YYYYMMDD.revision
+name: $(Date:yyyyMMdd)$(Rev:.r)
 
 trigger:
   branches:
     include:
-      - main  # Trigger on every push to the main branch
+      - main
 
 variables:
-  API_URL: 'https://2r1jycdqag.execute-api.us-east-1.amazonaws.com/Prod/detect-errors/'  # Your AWS API Gateway URL
+  API_URL: 'https://2r1jycdqag.execute-api.us-east-1.amazonaws.com/Prod/detect-errors/'
 
 pool:
-  vmImage: 'ubuntu-latest'  # Azure provides a clean Linux virtual machine
+  vmImage: 'ubuntu-latest'
 
-stages:
-- stage: BuildAndTest
-  displayName: 'Build and Test with AI Analysis'
-  jobs:
-  - job: RunWithAnomalyDetection
-    displayName: 'Run Calculator with LSTM Analysis'
-    steps:
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '3.9'
-      displayName: 'Install Python 3.9'
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.9'
+  displayName: 'Install Python 3.9'
 
-    - script: |
-        python calculator.py 2>&1 | tee build.log
-      displayName: 'Run Calculator App'
+- script: |
+    python calculator.py 2>&1 | tee build.log
+  displayName: 'Run Calculator App'
 
-    - script: |
-        echo "Preparing logs for AI analysis..."
-        # Format the build log into a valid JSON array of strings
-        LOG_JSON="["
-        while IFS= read -r line; do
-            # Escape any double quotes in the log line for JSON
-            escaped_line=$(echo "$line" | sed 's/"/\\"/g')
-            LOG_JSON="$LOG_JSON\"$escaped_line\","
-        done < build.log
-        LOG_JSON="${LOG_JSON%,}]"  # Remove the trailing comma and close the array
+- bash: |
+    echo "Preparing logs for AI analysis..."
+    # Format the build log into a valid JSON array of strings
+    LOG_JSON="["
+    while IFS= read -r line; do
+        # Escape any double quotes in the log line for JSON
+        escaped_line=$(echo "$line" | sed 's/"/\\"/g')
+        LOG_JSON="$LOG_JSON\"$escaped_line\","
+    done < build.log
+    LOG_JSON="${LOG_JSON%,}]"  # Remove the trailing comma and close the array
 
-        # Create the final payload
-        JSON_PAYLOAD="{\"log_lines\": $LOG_JSON}"
-        echo "Payload prepared."
+    # Create the final payload
+    JSON_PAYLOAD="{\"log_lines\": $LOG_JSON}"
+    echo "Payload prepared."
 
-        # Call the LSTM model endpoint hosted on AWS
-        echo "Sending logs to LSTM Model for analysis..."
-        RESPONSE=$(curl -s -X POST "$(API_URL)" -H "Content-Type: application/json" -d "$JSON_PAYLOAD")
-        echo "API Response: $RESPONSE"
+    # Call the LSTM model endpoint hosted on AWS
+    echo "Sending logs to LSTM Model for analysis..."
+    RESPONSE=$(curl -s -X POST "$(API_URL)" -H "Content-Type: application/json" -d "$JSON_PAYLOAD")
+    echo "API Response: $RESPONSE"
 
-        # Parse the JSON response to check for errors
-        ERRORS_FOUND=$(echo "$RESPONSE" | python -c "import json, sys; data=json.load(sys.stdin); print(data.get('errors_found', 'false'))")
-        
-        # Fail the Azure build if the AI detects an error
-        if [ "$ERRORS_FOUND" = "true" ]; then
-            echo "##vso[task.logissue type=error]AI Anomaly Detection: Errors found! Build failed."
-            exit 1
-        else
-            echo "AI Anomaly Detection: No errors found. Build succeeded."
-        fi
-      displayName: 'LSTM AI Analysis & Decision'
-      ignoreLASTEXITCODE: false  # This ensures the script failure fails the build
+    # Parse the JSON response to check for errors
+    ERRORS_FOUND=$(echo "$RESPONSE" | python -c "import json, sys; data=json.load(sys.stdin); print(data.get('errors_found', 'false'))")
+    
+    # Fail the Azure build if the AI detects an error
+    if [ "$ERRORS_FOUND" = "true" ]; then
+        echo "##vso[task.logissue type=error]AI Anomaly Detection: Errors found! Build failed."
+        exit 1
+    else
+        echo "AI Anomaly Detection: No errors found. Build succeeded."
+    fi
+  displayName: 'LSTM AI Analysis & Decision'
+  failOnStderr: true  # This will fail the task if any commands write to stderr
