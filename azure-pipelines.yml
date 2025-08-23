@@ -9,8 +9,7 @@ trigger:
 variables:
   API_URL: 'https://2r1jycdqag.execute-api.us-east-1.amazonaws.com/Prod/detect-errors/'
 
-pool:
-  vmImage: 'ubuntu-latest'
+pool: default  # ← CHANGED THIS LINE
 
 steps:
 - task: UsePythonVersion@0
@@ -53,4 +52,4 @@ steps:
         echo "AI Anomaly Detection: No errors found. Build succeeded."
     fi
   displayName: 'LSTM AI Analysis & Decision'
-  failOnStderr: true  # This will fail the task if any commands write to stderr
+  failOnStderr: true
