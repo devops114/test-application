@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 
+=======
+>>>>>>> 43533d725718e45a48a0579f24b724490ad3ce5e
 # azure-pipelines.yml
 name: $(Date:yyyyMMdd)$(Rev:.r)
 
@@ -52,4 +55,8 @@ steps:
     else
         echo "AI Anomaly Detection: No errors found. Build succeeded."
     fi
+<<<<<<< HEAD
   displayName: 'LSTM AI Analysis & Decision'
+=======
+  displayName: 'LSTM AI Analysis & Decision'
+>>>>>>> 43533d725718e45a48a0579f24b724490ad3ce5e
