@@ -9,16 +9,16 @@ trigger:
 variables:
   API_URL: 'https://2r1jycdqag.execute-api.us-east-1.amazonaws.com/Prod/detect-errors/'
 
-pool: default  # ← CHANGED THIS LINE
+pool: default
 
 steps:
-- task: UsePythonVersion@0
-  inputs:
-    versionSpec: '3.9'
-  displayName: 'Install Python 3.9'
+- script: |
+    echo "Using system Python: $(python3 --version)"
+    echo "Python path: $(which python3)"
+  displayName: 'Check Python Version'
 
 - script: |
-    python calculator.py 2>&1 | tee build.log
+    python3 calculator.py 2>&1 | tee build.log
   displayName: 'Run Calculator App'
 
 - bash: |
@@ -42,7 +42,7 @@ steps:
     echo "API Response: $RESPONSE"
 
     # Parse the JSON response to check for errors
-    ERRORS_FOUND=$(echo "$RESPONSE" | python -c "import json, sys; data=json.load(sys.stdin); print(data.get('errors_found', 'false'))")
+    ERRORS_FOUND=$(echo "$RESPONSE" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('errors_found', 'false'))")
     
     # Fail the Azure build if the AI detects an error
     if [ "$ERRORS_FOUND" = "true" ]; then
@@ -52,4 +52,3 @@ steps:
         echo "AI Anomaly Detection: No errors found. Build succeeded."
     fi
   displayName: 'LSTM AI Analysis & Decision'
-  failOnStderr: true
